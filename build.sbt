@@ -12,7 +12,7 @@ scalacOptions ++= Seq("-encoding", "UTF-8", "-unchecked", "-deprecation", "-Ywar
 val scalaTestVersion = "3.2.19"
 
 libraryDependencies ++= Seq(
-  "com.phasmidsoftware" %% "number" % "1.2.6",
+  "com.phasmidsoftware" %% "number" % "1.2.7-SNAPSHOT",
   "org.scalatest" %% "scalatest" % scalaTestVersion % "test",
   "ch.qos.logback" % "logback-classic" % "1.5.18" % "test",
   "org.scalacheck" %% "scalacheck" % "1.18.1" % "test" // This is used for testing Rational

@@ -31,7 +31,7 @@ object NumberApps extends App {
   /**
    * This demonstrates the "Basel" problem, another famous problem solved first by Euler.
    * [[https://en.wikipedia.org/wiki/Basel_problem]]
-   * This should output the following: 3.140637100985938±0.030%
+   * After showing the first ten terms of the series, it should output the following: 3.140637100985938±0.030%
    * NOTE that it converges slowly so it's probably not a good idea to reduce the tolerance much more.
    */
   val basel: InfiniteSeries[Number] = InfiniteSeries(LazyList.from(1).map(x => Rational(x).invert.square), 0.001)
