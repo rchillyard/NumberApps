@@ -48,7 +48,7 @@ object NumberApps extends App {
   /**
    * The following should print i½𝛑
    */
-  val x = i.log
+  val x = i.ln
   println(x.render)
 
   /**

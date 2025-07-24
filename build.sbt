@@ -3,7 +3,7 @@ organization := "com.phasmidsoftware"
 
 name := "NumberApps"
 
-version := "1.0.1-SNAPSHOT"
+version := "1.0.1"
 
 scalaVersion := "2.13.16"
 
@@ -12,7 +12,7 @@ scalacOptions ++= Seq("-encoding", "UTF-8", "-unchecked", "-deprecation", "-Ywar
 val scalaTestVersion = "3.2.19"
 
 libraryDependencies ++= Seq(
-  "com.phasmidsoftware" %% "number" % "1.2.7-SNAPSHOT",
+  "com.phasmidsoftware" %% "number" % "1.2.7",
   "org.scalatest" %% "scalatest" % scalaTestVersion % "test",
   "ch.qos.logback" % "logback-classic" % "1.5.18" % "test",
   "org.scalacheck" %% "scalacheck" % "1.18.1" % "test" // This is used for testing Rational
