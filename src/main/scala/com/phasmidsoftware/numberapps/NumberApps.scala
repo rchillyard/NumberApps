@@ -1,12 +1,10 @@
 package com.phasmidsoftware.numberapps
 
-import com.phasmidsoftware.number.core.{Constants, InfiniteSeries, L2, Number, Real, Transcendental}
 import com.phasmidsoftware.number.core.Constants._
-import com.phasmidsoftware.number.core.Constants.one
-import com.phasmidsoftware.number.core.inner.Rational
 import com.phasmidsoftware.number.core.Number.NumberOps
-import com.phasmidsoftware.number.expression.Exp
-import com.phasmidsoftware.number.expression.Expression.ExpressionOps
+import com.phasmidsoftware.number.core.inner.Rational
+import com.phasmidsoftware.number.core.{Constants, InfiniteSeries, Number}
+import com.phasmidsoftware.number.expression.{Exp, L2, Transcendental}
 
 import scala.util.Success
 
@@ -56,8 +54,8 @@ object NumberApps extends App {
    */
   val y = L2
   println(y.render)
-  val z = y.function(Exp)
-  z.evaluate match {
+  val z: Transcendental = y.function(Exp)
+  z.evaluateAsIs match {
     case Some(a) => println(a.render)
     case None =>
   }
