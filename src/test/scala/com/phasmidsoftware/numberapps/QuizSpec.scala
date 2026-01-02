@@ -10,7 +10,7 @@ import scala.util.Success
 class QuizSpec extends AnyFlatSpec with should.Matchers {
 
   behavior of "Quiz"
-  it should "get the first 100 Fibonacci numbers" in {
+  it should "get the first 10 Fibonacci numbers" in {
     println(fib10.mkString(", "))
     Quiz.fib10.length shouldBe 10
     Quiz.fib10.last shouldBe 34

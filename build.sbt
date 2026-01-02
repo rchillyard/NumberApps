@@ -3,7 +3,7 @@ organization := "com.phasmidsoftware"
 
 name := "NumberApps"
 
-version := "1.0.2"
+version := "1.0.3"
 
 scalaVersion := "3.7.3"
 
@@ -12,9 +12,13 @@ scalacOptions ++= Seq("-encoding", "UTF-8", "-unchecked", "-deprecation", "-Ywar
 val scalaTestVersion = "3.2.19"
 
 libraryDependencies ++= Seq(
-  "com.phasmidsoftware" % "number_2.13" % "1.2.10",
+  "com.phasmidsoftware" %% "number-core" % "1.4.0",
+  "com.phasmidsoftware" %% "number-algebra" % "1.4.0",
+  "com.phasmidsoftware" %% "number-expression" % "1.4.0",
+  "com.phasmidsoftware" %% "number-parse" % "1.4.0",
+  "com.phasmidsoftware" %% "number-top" % "1.4.0",
   "org.scalatest" %% "scalatest" % scalaTestVersion % "test",
-  "ch.qos.logback" % "logback-classic" % "1.5.19" % "test",
+  "ch.qos.logback" % "logback-classic" % "1.5.23" % "test",
   "org.scalacheck" %% "scalacheck" % "1.19.0" % "test" // This is used for testing Rational
 )
 

@@ -4,3 +4,6 @@
 /target/scala-2.13/classes/
 .bsp/
 .idea/
+project/project/target/config-classes/
+
+logs/
