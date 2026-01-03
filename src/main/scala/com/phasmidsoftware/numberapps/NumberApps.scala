@@ -42,7 +42,7 @@ import com.phasmidsoftware.number.expression.expr.{ConstE, ConstI, ConstPi, E, E
   println(expr6.toLatex)
   println(expr7.toLatex)
   println(expr8.toLatex)
-  
+
   println("Hello, NumberApps!")
 
   /**

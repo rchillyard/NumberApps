@@ -3,7 +3,7 @@ organization := "com.phasmidsoftware"
 
 name := "NumberApps"
 
-version := "1.0.5"
+version := "1.0.6"
 
 scalaVersion := "3.7.3"
 
