@@ -9,7 +9,7 @@ scalaVersion := "3.7.3"
 
 scalacOptions ++= Seq("-encoding", "UTF-8", "-unchecked", "-deprecation", "-Ywarn-dead-code", "-Ywarn-value-discard", "-Ywarn-unused" )
 
-val numberVersion = "1.10.3-SNAPSHOT"
+val numberVersion = "1.10.3"
 val scalaTestVersion = "3.2.20"
 
 libraryDependencies ++= Seq(
