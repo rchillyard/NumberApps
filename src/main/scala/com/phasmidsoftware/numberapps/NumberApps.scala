@@ -3,14 +3,14 @@
  */
 package com.phasmidsoftware.numberapps
 
-import com.phasmidsoftware.number.core.inner.Rational
-
-import scala.util.Success
 import com.phasmidsoftware.number.algebra.eager.Eager
 import com.phasmidsoftware.number.algebra.util.LatexRenderer.LatexRendererOps
+import com.phasmidsoftware.number.core.inner.Rational
 import com.phasmidsoftware.number.core.numerical.{InfiniteSeries, Number}
 import com.phasmidsoftware.number.expression.expr.Root.{phi, rootTwo}
-import com.phasmidsoftware.number.expression.expr.{ConstE, ConstI, ConstPi, E, Exp, Infinity, L2, One, Pi, Transcendental, Zero}
+import com.phasmidsoftware.number.expression.expr.*
+
+import scala.util.Success
 
 @main def exampleMainProgram(): Unit =
   import com.phasmidsoftware.number.top.expr.*
@@ -49,7 +49,7 @@ import com.phasmidsoftware.number.expression.expr.{ConstE, ConstI, ConstPi, E, E
    * This should output the following: List(0, 1, 𝛑, 𝜀, 𝛗, √2, ∞)
    */
   val constants: Seq[String] = {
-    Seq(Zero, One, ConstPi, ConstE, phi, rootTwo, ConstI, Infinity) map (_.render)
+    Seq(Zero, One, Pi, E, phi, rootTwo, I, Infinity) map (_.render)
   }
   println(constants)
 
@@ -58,7 +58,7 @@ import com.phasmidsoftware.number.expression.expr.{ConstE, ConstI, ConstPi, E, E
    * [[https://en.wikipedia.org/wiki/Euler%27s_identity]]
    * THe output should be -1.
     */
-  val negOne = ConstE ∧ ConstI
+  val negOne = E ∧ (I * Pi)
   println(negOne.render)
 
   /**
@@ -81,7 +81,7 @@ import com.phasmidsoftware.number.expression.expr.{ConstE, ConstI, ConstPi, E, E
   /**
    * The following should print i½𝛑
    */
-  val x = ConstI.ln
+  val x = I.ln
   println(x.render)
 
   /**
