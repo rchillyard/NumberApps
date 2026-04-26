@@ -3,13 +3,13 @@ organization := "com.phasmidsoftware"
 
 name := "NumberApps"
 
-version := "1.0.7"
+version := "1.0.8"
 
 scalaVersion := "3.7.3"
 
 scalacOptions ++= Seq("-encoding", "UTF-8", "-unchecked", "-deprecation", "-Ywarn-dead-code", "-Ywarn-value-discard", "-Ywarn-unused" )
 
-val numberVersion = "1.10.3"
+val numberVersion = "1.10.4"
 val scalaTestVersion = "3.2.20"
 
 libraryDependencies ++= Seq(
