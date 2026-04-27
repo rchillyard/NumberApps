@@ -1,6 +1,6 @@
 package com.phasmidsoftware.numberapps.eml
 
-import com.phasmidsoftware.number.expression.expr.{E, Infinity, MinusOne, One, Zero}
+import com.phasmidsoftware.number.expression.expr.{E, Infinity, MinusOne, Zero, One as ExprOne}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 
@@ -11,20 +11,20 @@ class EmlSpec extends AnyFlatSpec with Matchers {
   it should "handle one" in {
     val one: S = Eml.one
     one.render shouldBe "1"
-    one.asExpression shouldBe One
+    one.asExpression shouldBe ExprOne
   }
   it should "handle E" in {
     val e: S = Eml.e
     e.render shouldBe "eml(1,1)"
     e.asExpression shouldBe E
     e.ln.render shouldBe "eml(1,eml(eml(1,eml(1,1)),1))"
-    e.ln.asExpression shouldBe One
+    e.ln.asExpression shouldBe ExprOne
   }
   it should "handle zero" in {
     val zero = Eml.zero
     zero.render shouldBe "eml(1,eml(eml(1,1),1))"
     zero.asExpression shouldBe Zero
-    zero.exp.asExpression shouldBe One
+    zero.exp.asExpression shouldBe ExprOne
   }
   it should "handle Eml(Eml.e,1)" in {
     val ee: S = Eml(Eml.e, 1)
@@ -41,7 +41,7 @@ class EmlSpec extends AnyFlatSpec with Matchers {
   it should "handle Eml(Eml.zero,1)" in {
     val e: S = Eml(Eml.zero, 1)
     e.render shouldBe "eml(eml(1,eml(eml(1,1),1)),1)"
-    e.asExpression shouldBe One
+    e.asExpression shouldBe ExprOne
     e.ln.render shouldBe "eml(1,eml(eml(1,eml(eml(1,eml(eml(1,1),1)),1)),1))"
     e.ln.asExpression shouldBe Zero
   }
@@ -50,8 +50,22 @@ class EmlSpec extends AnyFlatSpec with Matchers {
     e.render shouldBe "eml(1,eml(1,eml(eml(1,1),1)))"
     e.asExpression shouldBe (E + Infinity)
   }
+  it should "expand One" in {
+    val expand: Seq[S] = One.expand
+    expand shouldBe Seq(Eml.e)
+  }
+  it should "expand Eml.e" in {
+    val expand: Seq[S] = Eml.e.expand
+    expand shouldBe List(Eml(1, 1), Eml(Eml(1, 1), Eml(1, 1)), Eml(1, Eml(1, 1)), Eml(Eml(1, 1), 1))
+  }
+  it should "expand Eml.e.expand" in {
+    val expand: Seq[S] = Eml.e.expand
+    val expansion = for (e <- expand; x <- e.expand) yield x
+    println(expansion.mkString(", "))
+    expansion shouldBe List(Eml(1, 1), Eml(Eml(1, 1), Eml(1, 1)), Eml(1, Eml(1, 1)), Eml(Eml(1, 1), 1), Eml(1, Eml(1, 1)), Eml(Eml(1, 1), Eml(1, 1)), Eml(Eml(1, 1), 1), Eml(Eml(1, 1), Eml(1, 1)))
+  }
   it should "find all expressions" in {
-    val s0 = `1`
+    val s0 = One
     val s1: Eml = Eml.e.asInstanceOf[Eml]
     val s20 = Eml(s0, s1)
     val s21 = Eml(s1, s0)
@@ -77,9 +91,5 @@ class EmlSpec extends AnyFlatSpec with Matchers {
     println("s221: " + s221.debug)
     println("s222: " + s222.debug)
     println("s223: " + s223.debug)
-    //    def inner(r: Set[S], s: Seq[S], n: Int): Set[S] = (n, s) match {
-    //      case (0, _) => r
-    //      case (_, Eml.e) => inner(r + , s, n - 1)
-    //    }
   }
 }

@@ -10,10 +10,12 @@ scalaVersion := "3.7.3"
 scalacOptions ++= Seq("-encoding", "UTF-8", "-unchecked", "-deprecation", "-Ywarn-dead-code", "-Ywarn-value-discard", "-Ywarn-unused" )
 
 val numberVersion = "1.10.4"
+val visitorVersion = "1.6.0"
 val scalaTestVersion = "3.2.20"
 
 libraryDependencies ++= Seq(
   "com.phasmidsoftware" %% "number" % numberVersion,
+  "com.phasmidsoftware" %% "visitor" % visitorVersion,
   "org.scalatest" %% "scalatest" % scalaTestVersion % "test",
   "ch.qos.logback" % "logback-classic" % "1.5.32" % "test",
   "org.scalacheck" %% "scalacheck" % "1.19.0" % "test" // This is used for testing Rational
