@@ -4,6 +4,8 @@ import com.phasmidsoftware.number.algebra.core.Renderable
 import com.phasmidsoftware.number.algebra.util.LatexRenderer.LatexRendererOps
 import com.phasmidsoftware.number.expression.expr.*
 
+import scala.annotation.tailrec
+
 /**
   * A sealed trait representing a mathematical structure that supports various operations
   * including exponentiation, natural logarithms, addition, and multiplication.
@@ -23,7 +25,14 @@ sealed trait S extends Renderable:
 
   def ln: S = Eml(1, Eml(Eml(1, this), 1))
 
-  def expand: Seq[S]
+  def expand(depth: Int): Set[S]
+
+  def expandOnce: Set[S] = expand(Int.MaxValue)
+
+  def expandN(rounds: Int): Set[S] =
+    (1 to rounds).foldLeft(Set(this: S)) { (current, _) =>
+      current.flatMap(_.expandOnce)
+    }
 
   infix def +(s: S): S = (exp * s.exp).ln
 
@@ -40,7 +49,9 @@ sealed trait S extends Renderable:
   * - Render the object into its string representation.
   */
 case object One extends S {
-  def expand: Seq[S] = Seq(Eml.e)
+  def expand(depth: Int): Set[S] =
+    if depth <= 0 then Set(this)
+    else Set(this, Eml(One, One)) // either stay as One, or become eml(1,1)
 
   def asExpression: Expression = com.phasmidsoftware.number.expression.expr.One
 
@@ -72,16 +83,13 @@ case object One extends S {
   * using specific functions (`UniFunction`, `BiFunction`, `Exp`, `Ln`, `Negate`, and `Sum`).
   */
 case class Eml(x: S, y: S) extends S:
-  def expand: Seq[S] = this match {
-    case Eml(One, One) =>
-      Seq(this, Eml(Eml.e, Eml.e), Eml(1, Eml.e), Eml(Eml.e, 1))
-    case Eml(One, z) =>
-      Seq(this, Eml(Eml.e, z))
-    case Eml(z, One) =>
-      Seq(this, Eml(z, Eml.e))
-    case Eml(z, w) =>
-      Nil
-  }
+  def expand(depth: Int): Set[S] =
+    if depth <= 0 then Set(this)
+    else
+      for
+        xExp <- x.expand(depth - 1)
+        yExp <- y.expand(depth - 1)
+      yield Eml(xExp, yExp)
 
   def asExpression: Expression = rawExpression.simplify
 
@@ -160,10 +168,25 @@ object Eml {
     * @return an instance of type `S` constructed based on `x` and `y`.
     * @throws EmlException if `x` does not match predefined conditions (e.g., `x` not equal to 1).
     */
-  def apply(x: Int, y: Int): S = (x) match {
+  def apply(x: Int, y: Int): S = x match {
     case 1 => apply(One, y)
     case _ => throw EmlException(s"apply($x,$y)")
   }
+  //
+  //  def grow(n: Int): Set[S] =
+  //    @tailrec
+  //    def inner(r: Set[S])(ss: Set[S], i: Int): Set[S] = (ss, i) match {
+  //      case (_, -1) =>
+  //        r
+  //      case (ss, _) if ss.isEmpty =>
+  //        r
+  //      case (q: Set[S], 0) =>
+  //        inner(r ++ q)(Set.empty, i - 1)
+  //      case (q: Set[S], _) =>
+  //        val ss1 = q.flatMap(_.expand)
+  //        inner(r ++ q)(ss1, i - 1)
+  //    }
+  //    inner(Set.empty)(Set(One), n)
 
   val one: S = One
   val zero: S = One.ln
