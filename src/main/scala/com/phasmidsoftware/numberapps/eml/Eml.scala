@@ -25,14 +25,21 @@ sealed trait S extends Renderable:
 
   def ln: S = Eml(1, Eml(Eml(1, this), 1))
 
-  def expand(depth: Int): Set[S]
+  def expand: Set[S]
 
-  def expandOnce: Set[S] = expand(Int.MaxValue)
+  def expandOnce: Set[S] = expand
 
   def expandN(rounds: Int): Set[S] =
     (1 to rounds).foldLeft(Set(this: S)) { (current, _) =>
       current.flatMap(_.expandOnce)
     }
+
+  def expandNToMap[T, U](fKey: S => T)(fValue: S => U)(rounds: Int): Map[T, U] =
+    (1 to rounds).foldLeft(Map(fKey(this) -> this)) { (current, _) =>
+      current.values.flatMap(_.expandOnce)
+        .map(s => fKey(s) -> s)
+        .toMap
+    }.map((k, v) => (k, fValue(v)))
 
   infix def +(s: S): S = (exp * s.exp).ln
 
@@ -49,9 +56,7 @@ sealed trait S extends Renderable:
   * - Render the object into its string representation.
   */
 case object One extends S {
-  def expand(depth: Int): Set[S] =
-    if depth <= 0 then Set(this)
-    else Set(this, Eml(One, One)) // either stay as One, or become eml(1,1)
+  def expand: Set[S] = Set(this, Eml(One, One))
 
   def asExpression: Expression = com.phasmidsoftware.number.expression.expr.One
 
@@ -83,13 +88,11 @@ case object One extends S {
   * using specific functions (`UniFunction`, `BiFunction`, `Exp`, `Ln`, `Negate`, and `Sum`).
   */
 case class Eml(x: S, y: S) extends S:
-  def expand(depth: Int): Set[S] =
-    if depth <= 0 then Set(this)
-    else
-      for
-        xExp <- x.expand(depth - 1)
-        yExp <- y.expand(depth - 1)
-      yield Eml(xExp, yExp)
+  def expand: Set[S] =
+    for
+      xExp <- x.expand
+      yExp <- y.expand
+    yield Eml(xExp, yExp)
 
   def asExpression: Expression = rawExpression.simplify
 
