@@ -11,7 +11,7 @@ scalacOptions ++= Seq("-encoding", "UTF-8", "-unchecked", "-deprecation", "-Ywar
 
 Test / unmanagedSourceDirectories += baseDirectory.value / "src" / "it" / "scala"
 
-val numberVersion = "1.10.5-SNAPSHOT"
+val numberVersion = "1.10.5"
 val visitorVersion = "1.6.0"
 val scalaTestVersion = "3.2.20"
 
