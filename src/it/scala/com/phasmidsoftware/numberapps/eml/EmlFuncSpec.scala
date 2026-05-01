@@ -32,12 +32,12 @@ class EmlFuncSpec extends AnyFlatSpec with Matchers {
     val ss = Eml.e.expandN(4)
     ss.size shouldBe 458_285
     println(s"Size of expanded set: ${ss.size}")
-    val es: Seq[Expression] = ss.toSeq.zipWithIndex.take(10000).map {
+    val es: Seq[Expression] = ss.toSeq.zipWithIndex.take(100_000).map {
       (s, i) =>
         i match {
           case 98 | 319 | 421 | 717 | 829 | 835 | 1132 | 1381 =>
             Noop(s"$i")
-          case _ if i < 1381 =>
+          case _ if i < 99_999 =>
             val expression = s.asExpression
             val evaluatedExpression = expression.evaluateAsIs
             if (evaluatedExpression.isDefined)
@@ -51,7 +51,7 @@ class EmlFuncSpec extends AnyFlatSpec with Matchers {
         }
     }
     val simple = es.filter(_.evaluateAsIs.isDefined)
-    simple.size shouldBe 83
+    simple.size shouldBe 4332
   }
 
   it should "perform task with expansion 3 in parallel" in {
