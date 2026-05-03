@@ -893,4 +893,12 @@ class EmlSpec extends AnyFlatSpec with Matchers {
     val s = Eml(Eml(Eml(Eml(Eml(1, 1), 1), Eml(Eml(1, 1), 1)), Eml(1, Eml(Eml(1, 1), 1))), Eml(Eml(Eml(Eml(1, 1), 1), Eml(Eml(1, 1), 1)), 1))
     val expression = s.asExpression
   }
+  it should "materialize #410862" in {
+    val s = Eml(Eml(Eml(Eml(Eml(1, 1), 1), Eml(Eml(1, 1), 1)), Eml(1, Eml(Eml(1, 1), 1))), Eml(Eml(Eml(Eml(1, 1), 1), Eml(Eml(1, 1), 1)), 1))
+    val expression = s.asExpression
+  }
+  it should "materialize #407655" in {
+    val s = Eml(Eml(Eml(Eml(Eml(1, 1), Eml(1, 1)), Eml(Eml(1, 1), 1)), Eml(Eml(Eml(1, 1), 1), Eml(Eml(1, 1), 1))), Eml(Eml(Eml(Eml(1, 1), 1), Eml(1, 1)), Eml(Eml(Eml(1, 1), 1), Eml(1, Eml(1, 1)))))
+    val expression = s.asExpression
+  }
 }

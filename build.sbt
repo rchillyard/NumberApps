@@ -3,7 +3,7 @@ organization := "com.phasmidsoftware"
 
 name := "NumberApps"
 
-version := "1.0.8"
+version := "1.0.9"
 
 scalaVersion := "3.7.3"
 
@@ -11,7 +11,7 @@ scalacOptions ++= Seq("-encoding", "UTF-8", "-unchecked", "-deprecation", "-Ywar
 
 Test / unmanagedSourceDirectories += baseDirectory.value / "src" / "it" / "scala"
 
-val numberVersion = "1.10.5"
+val numberVersion = "1.10.6-SNAPSHOT"
 val visitorVersion = "1.6.0"
 val scalaTestVersion = "3.2.20"
 

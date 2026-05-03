@@ -1,8 +1,13 @@
 package com.phasmidsoftware.numberapps.eml
 
 import com.phasmidsoftware.number.algebra.core.Renderable
+import com.phasmidsoftware.number.algebra.eager.{Eager, IsFinite}
+import com.phasmidsoftware.number.algebra.util.Converters.convertIntToRational
 import com.phasmidsoftware.number.algebra.util.LatexRenderer.LatexRendererOps
 import com.phasmidsoftware.number.expression.expr.*
+import com.phasmidsoftware.numberapps.eml.Eml.{findExactTreesFuture, findExactTreesPar}
+
+import scala.collection.parallel.ParSeq
 
 /**
   * A sealed trait representing a Tree whose grammar is simple:
@@ -253,6 +258,91 @@ object Eml {
     case _ => throw EmlException(s"apply($x,$y)")
   }
 
+  def findExactTreesPar: (Int, ParSeq[(S, Eager)]) = {
+    import Eml.constants
+    import com.phasmidsoftware.number.core.numerical.Divides.given
+
+    import scala.collection.parallel.CollectionConverters.*
+
+    val allTrees = One.expandN(5)
+    System.err.println(s"Confirmed trees: ${allTrees.size}")
+    val exactTrees = allTrees.par.zipWithIndex
+      .map { case (s, i) => (s, i, s.asExpression.evaluateAsIs) }
+      .map { case (k, i, v) => if 10_000 |> i then System.err.println(s"Processing tree $i: $k"); (k, i, v) }
+      .collect { case (k, _, Some(IsFinite(v))) => k -> v }
+      .toMap
+    (allTrees.size, exactTrees.toSeq)
+  }
+
+  def findExactTreesFuture: (Int, Seq[(S, Eager)]) = {
+    import Eml.constants
+    import com.phasmidsoftware.number.core.numerical.Divides.given
+
+    import scala.concurrent.*
+    import scala.concurrent.ExecutionContext.Implicits.global
+    import scala.concurrent.duration.*
+
+    val PartitionTimeout = 2.minutes
+    val AwaitExactTreesTimeout = 5.minutes
+    val NumPartitions = 8
+
+    val allTrees = One.expandN(5).toSeq
+    System.err.println(s"Confirmed trees: ${allTrees.size}")
+    val partitions = allTrees.zipWithIndex.grouped(allTrees.size / NumPartitions).toSeq
+    val indexedPartitions = partitions.zipWithIndex
+    val futures: Seq[Future[Seq[(S, Eager)]]] =
+      indexedPartitions.map {
+        case (xs, i) =>
+          val partition = Partition(xs, i, xs.head._2)
+          val willBeEvaluatedPartition = Future {
+            partition.evaluate
+          }
+          val willBeTimeout = Future {
+            Thread.sleep(PartitionTimeout.toMillis)
+            throw new java.util.concurrent.TimeoutException(s"$partition) timed out after $PartitionTimeout")
+          }
+          Future.firstCompletedOf(Seq(willBeEvaluatedPartition, willBeTimeout))
+            .recover { case ex =>
+              System.err.println(s"Partition ${xs.head} failed or timed out: $ex")
+              Seq.empty
+            }
+      }
+
+    def flattenToMap(treeResultsByFuture: Seq[Seq[(S, Eager)]]): Map[S, Eager] =
+      treeResultsByFuture.flatten.toMap
+
+    val exactTrees: Map[S, Eager] =
+      Await.result(
+        Future.sequence(futures).map(flattenToMap),
+        AwaitExactTreesTimeout
+      )
+
+    (allTrees.size, exactTrees.toSeq)
+  }
+
+  val ProgressReportInterval = 10_000
+
+  import com.phasmidsoftware.number.core.numerical.Divides.IntDivides
+
+  def reportProgress(index: Int, tree: S): Unit =
+    if ProgressReportInterval |> index then
+      System.err.println(s"Processing tree $index: $tree")
+
+  def evaluateFiniteTree(tree: S): Option[(S, Eager)] =
+    tree.asExpression.evaluateAsIs match
+      case Some(IsFinite(value)) => Some(tree -> value)
+      case _ => None
+
+  case class Partition(partition: Seq[(S, Int)], partitionIndex: Int, start: Int):
+    def evaluate: Seq[(S, Eager)] =
+      partition.flatMap {
+        case (tree, treeIndex) =>
+          reportProgress(treeIndex, tree)
+          evaluateFiniteTree(tree)
+      }
+
+    override def toString: String = s"Partition: $partitionIndex, starting with $start"
+
   /**
     * A given set of constant mappings between instances of type `S`.
     *
@@ -290,6 +380,12 @@ object Eml {
   val e: S = One.exp
 }
 
+@main def run(): Unit = {
+  val (nAllTrees, exactTrees) = findExactTreesFuture
+  exactTrees.foreach {
+    case (k, v) => println(s"Exact tree: $k -> $v")
+  }
+}
 /**
   * Represents a custom exception used within the context of `Eml` operations.
   *
