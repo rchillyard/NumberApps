@@ -1,13 +1,14 @@
 package com.phasmidsoftware.numberapps.eml
 
 import com.phasmidsoftware.number.algebra.core.Renderable
-import com.phasmidsoftware.number.algebra.eager.{Eager, IsFinite}
-import com.phasmidsoftware.number.algebra.util.Converters.convertIntToRational
+import com.phasmidsoftware.number.algebra.eager.{Eager, IsFinite, NaturalExponential, WholeNumber}
 import com.phasmidsoftware.number.algebra.util.LatexRenderer.LatexRendererOps
 import com.phasmidsoftware.number.expression.expr.*
-import com.phasmidsoftware.numberapps.eml.Eml.{findExactTreesFuture, findExactTreesPar}
+import com.phasmidsoftware.numberapps.eml.Eml.{findExactTreesFuture, logger}
+import org.slf4j.{Logger, LoggerFactory}
 
 import scala.collection.parallel.ParSeq
+import scala.concurrent.duration.{Duration, DurationInt}
 
 /**
   * A sealed trait representing a Tree whose grammar is simple:
@@ -115,6 +116,18 @@ sealed trait S extends Renderable:
     */
   def asExpression: Expression
 
+object S {
+
+  given Ordering[S] with
+    def compare(x: S, y: S): Int = (x, y) match
+      case (One, One) => 0
+      case (One, _: Eml) => -1
+      case (_: Eml, One) => 1
+      case (Eml(x1, y1), Eml(x2, y2)) =>
+        val c = compare(x1, x2)
+        if c != 0 then c else compare(y1, y2)
+
+}
 /**
   * Represents the mathematical value of one as a single instance and implements the behavior of the `S` trait.
   *
@@ -162,7 +175,7 @@ case class Eml(x: S, y: S) extends S:
       yExp <- y.expand
     yield Eml(xExp, yExp)
 
-  def asExpression: Expression = rawExpression.simplify
+  def asExpression: Expression = Eml.expressionCache.getOrElseUpdate(this, rawExpression.simplify)
 
   def render: String = s"eml($x,$y)"
 
@@ -258,6 +271,10 @@ object Eml {
     case _ => throw EmlException(s"apply($x,$y)")
   }
 
+  private val expressionCache = scala.collection.concurrent.TrieMap[Eml, Expression]()
+
+  val logger: Logger = LoggerFactory.getLogger(getClass)
+
   def findExactTreesPar: (Int, ParSeq[(S, Eager)]) = {
     import Eml.constants
     import com.phasmidsoftware.number.core.numerical.Divides.given
@@ -265,45 +282,39 @@ object Eml {
     import scala.collection.parallel.CollectionConverters.*
 
     val allTrees = One.expandN(5)
-    System.err.println(s"Confirmed trees: ${allTrees.size}")
+    logger.info(s"Confirmed trees: ${allTrees.size}")
     val exactTrees = allTrees.par.zipWithIndex
       .map { case (s, i) => (s, i, s.asExpression.evaluateAsIs) }
-      .map { case (k, i, v) => if 10_000 |> i then System.err.println(s"Processing tree $i: $k"); (k, i, v) }
+      .map { case (k, i, v) => if 10_000 |> i then logger.info(s"Processing tree $i: $k"); (k, i, v) }
       .collect { case (k, _, Some(IsFinite(v))) => k -> v }
       .toMap
     (allTrees.size, exactTrees.toSeq)
   }
 
-  def findExactTreesFuture: (Int, Seq[(S, Eager)]) = {
-    import Eml.constants
-    import com.phasmidsoftware.number.core.numerical.Divides.given
-
+  def findExactTreesFuture(trees: Seq[S], perPartitionTimeout: Duration, overallTimeout: Duration, numPartitions: Int = 8): (Int, Seq[(S, Eager)]) = {
     import scala.concurrent.*
     import scala.concurrent.ExecutionContext.Implicits.global
-    import scala.concurrent.duration.*
 
-    val PartitionTimeout = 2.minutes
-    val AwaitExactTreesTimeout = 5.minutes
-    val NumPartitions = 8
-
-    val allTrees = One.expandN(5).toSeq
-    System.err.println(s"Confirmed trees: ${allTrees.size}")
-    val partitions = allTrees.zipWithIndex.grouped(allTrees.size / NumPartitions).toSeq
+    val allTrees = trees
+    logger.info(s"Confirmed trees: ${allTrees.size}")
+    val partitions = allTrees.zipWithIndex.grouped(allTrees.size / numPartitions).toSeq
     val indexedPartitions = partitions.zipWithIndex
     val futures: Seq[Future[Seq[(S, Eager)]]] =
       indexedPartitions.map {
         case (xs, i) =>
-          val partition = Partition(xs, i, xs.head._2)
+          val partition = Partition(xs, i)
           val willBeEvaluatedPartition = Future {
-            partition.evaluate
+            val result = partition.evaluate
+            logger.info(s"Partition ${partition} completed successfully")
+            result
           }
           val willBeTimeout = Future {
-            Thread.sleep(PartitionTimeout.toMillis)
-            throw new java.util.concurrent.TimeoutException(s"$partition) timed out after $PartitionTimeout")
+            Thread.sleep(perPartitionTimeout.toMillis)
+            throw new java.util.concurrent.TimeoutException(s"$partition) timed out after $perPartitionTimeout")
           }
           Future.firstCompletedOf(Seq(willBeEvaluatedPartition, willBeTimeout))
             .recover { case ex =>
-              System.err.println(s"Partition ${xs.head} failed or timed out: $ex")
+              logger.info(s"Partition ${xs.head} failed or timed out: $ex")
               Seq.empty
             }
       }
@@ -314,19 +325,19 @@ object Eml {
     val exactTrees: Map[S, Eager] =
       Await.result(
         Future.sequence(futures).map(flattenToMap),
-        AwaitExactTreesTimeout
+        overallTimeout
       )
 
     (allTrees.size, exactTrees.toSeq)
   }
 
-  val ProgressReportInterval = 10_000
+  val ProgressReportInterval = 2_000
 
   import com.phasmidsoftware.number.core.numerical.Divides.IntDivides
 
-  def reportProgress(index: Int, tree: S): Unit =
+  def reportProgress(partitionIndex: Int, index: Int, tree: S): Unit =
     if ProgressReportInterval |> index then
-      System.err.println(s"Processing tree $index: $tree")
+      logger.info(s"Partition $partitionIndex, tree $index: $tree")
 
   def evaluateFiniteTree(tree: S): Option[(S, Eager)] =
     tree.asExpression.evaluateAsIs match
@@ -334,14 +345,20 @@ object Eml {
       case _ => None
 
   case class Partition(partition: Seq[(S, Int)], partitionIndex: Int, start: Int):
+    def size: Int = partition.size
+
     def evaluate: Seq[(S, Eager)] =
       partition.flatMap {
         case (tree, treeIndex) =>
-          reportProgress(treeIndex, tree)
+          reportProgress(partitionIndex, treeIndex, tree)
           evaluateFiniteTree(tree)
       }
 
-    override def toString: String = s"Partition: $partitionIndex, starting with $start"
+    override def toString: String = s"Partition: $partitionIndex, with size $size, starting with $start"
+
+  object Partition:
+    def apply(partition: Seq[(S, Int)], partitionIndex: Int): Partition =
+      new Partition(partition, partitionIndex, partition.headOption.map(_._2).getOrElse(0))
 
   /**
     * A given set of constant mappings between instances of type `S`.
@@ -353,13 +370,54 @@ object Eml {
     * @return A `Map[S, S]` containing the defined mappings of specific instances of `S`.
     */
   given constants: Map[S, S] = Map(
-    Eml(1, Eml(Eml(1, Eml(1, 1)), 1)) -> One,
-    Eml(Eml(1, Eml(Eml(1, 1), 1)), 1) -> One,
-    Eml(Eml(1, 1), Eml(Eml(Eml(1, 1), Eml(1, 1)), 1)) -> One,
+    Eml(1, Eml(1, Eml(Eml(1, Eml(1, 1)), 1))) -> e,
     Eml(1, Eml(Eml(1, 1), 1)) -> zero,
+    Eml(1, Eml(Eml(1, Eml(1, 1)), 1)) -> One,
+    Eml(1, Eml(Eml(1, 1), Eml(Eml(Eml(1, 1), Eml(1, 1)), 1))) -> e,
     Eml(Eml(1, 1), Eml(Eml(Eml(1, 1), 1), 1)) -> zero,
-    Eml(Eml(1, Eml(Eml(1, 1), 1)), Eml(1, 1)) -> zero
-  )
+    Eml(Eml(1, 1), Eml(Eml(Eml(1, 1), Eml(1, 1)), 1)) -> One,
+    Eml(Eml(1, 1), Eml(Eml(Eml(1, 1), Eml(Eml(1, 1), 1)), 1)) -> e,
+    Eml(Eml(1, Eml(1, 1)), Eml(Eml(Eml(1, Eml(1, 1)), 1), 1)) -> zero,
+    Eml(Eml(1, Eml(1, 1)), Eml(Eml(Eml(1, Eml(1, 1)), Eml(1, 1)), 1)) -> One,
+    Eml(Eml(1, Eml(1, 1)), Eml(Eml(Eml(1, Eml(1, 1)), Eml(Eml(1, 1), 1)), 1)) -> e,
+    Eml(Eml(1, Eml(Eml(1, 1), 1)), 1) -> One,
+    Eml(Eml(1, Eml(Eml(1, 1), 1)), Eml(1, 1)) -> zero,
+    Eml(Eml(1, Eml(Eml(1, 1), 1)), Eml(1, Eml(Eml(1, Eml(1, 1)), 1))) -> One,
+    Eml(Eml(1, Eml(Eml(1, 1), 1)), Eml(Eml(1, 1), Eml(Eml(Eml(1, 1), Eml(1, 1)), 1))) -> One,
+    Eml(Eml(1, Eml(Eml(1, 1), 1)), Eml(Eml(1, Eml(Eml(1, 1), 1)), 1)) -> One,
+    Eml(Eml(1, Eml(Eml(1, Eml(1, 1)), 1)), Eml(1, Eml(Eml(1, Eml(1, 1)), 1))) -> e,
+    Eml(Eml(1, Eml(Eml(1, Eml(1, 1)), 1)), Eml(Eml(1, 1), 1)) -> zero,
+    Eml(Eml(1, Eml(Eml(1, Eml(1, 1)), 1)), Eml(Eml(1, 1), Eml(Eml(Eml(1, 1), Eml(1, 1)), 1))) -> e,
+    Eml(Eml(1, Eml(Eml(1, Eml(1, 1)), 1)), Eml(Eml(1, Eml(1, 1)), 1)) -> One,
+    Eml(Eml(1, Eml(Eml(1, Eml(1, 1)), 1)), Eml(Eml(1, Eml(Eml(1, 1), 1)), 1)) -> e,
+    Eml(Eml(Eml(1, 1), 1), Eml(Eml(Eml(Eml(1, 1), 1), 1), 1)) -> zero,
+    Eml(Eml(Eml(1, 1), 1), Eml(Eml(Eml(Eml(1, 1), 1), Eml(1, 1)), 1)) -> One,
+    Eml(Eml(Eml(1, 1), 1), Eml(Eml(Eml(Eml(1, 1), 1), Eml(Eml(1, 1), 1)), 1)) -> e,
+    Eml(Eml(Eml(1, 1), Eml(1, 1)), Eml(Eml(Eml(Eml(1, 1), Eml(1, 1)), 1), 1)) -> zero,
+    Eml(Eml(Eml(1, 1), Eml(1, 1)), Eml(Eml(Eml(Eml(1, 1), Eml(1, 1)), Eml(1, 1)), 1)) -> One,
+    Eml(Eml(Eml(1, 1), Eml(1, 1)), Eml(Eml(Eml(Eml(1, 1), Eml(1, 1)), Eml(Eml(1, 1), 1)), 1)) -> e,
+    Eml(Eml(Eml(1, 1), Eml(Eml(Eml(1, 1), 1), 1)), 1) -> One,
+    Eml(Eml(Eml(1, 1), Eml(Eml(Eml(1, 1), 1), 1)), Eml(1, 1)) -> zero,
+    Eml(Eml(Eml(1, 1), Eml(Eml(Eml(1, 1), 1), 1)), Eml(1, Eml(Eml(1, Eml(1, 1)), 1))) -> One,
+    Eml(Eml(Eml(1, 1), Eml(Eml(Eml(1, 1), 1), 1)), Eml(Eml(1, 1), Eml(Eml(Eml(1, 1), Eml(1, 1)), 1))) -> One,
+    Eml(Eml(Eml(1, 1), Eml(Eml(Eml(1, 1), 1), 1)), Eml(Eml(1, Eml(Eml(1, 1), 1)), 1)) -> One,
+    Eml(Eml(Eml(1, 1), Eml(Eml(Eml(1, 1), Eml(1, 1)), 1)), 1) -> e,
+    Eml(Eml(Eml(1, 1), Eml(Eml(Eml(1, 1), Eml(1, 1)), 1)), Eml(1, Eml(Eml(1, Eml(1, 1)), 1))) -> e,
+    Eml(Eml(Eml(1, 1), Eml(Eml(Eml(1, 1), Eml(1, 1)), 1)), Eml(Eml(1, 1), 1)) -> zero,
+    Eml(Eml(Eml(1, 1), Eml(Eml(Eml(1, 1), Eml(1, 1)), 1)), Eml(Eml(1, 1), Eml(Eml(Eml(1, 1), Eml(1, 1)), 1))) -> e,
+    Eml(Eml(Eml(1, 1), Eml(Eml(Eml(1, 1), Eml(1, 1)), 1)), Eml(Eml(1, Eml(1, 1)), 1)) -> One,
+    Eml(Eml(Eml(1, 1), Eml(Eml(Eml(1, 1), Eml(1, 1)), 1)), Eml(Eml(1, Eml(Eml(1, 1), 1)), 1)) -> e,
+    Eml(Eml(Eml(1, Eml(Eml(1, 1), 1)), 1), 1) -> e,
+    Eml(Eml(Eml(1, Eml(Eml(1, 1), 1)), 1), Eml(1, Eml(Eml(1, Eml(1, 1)), 1))) -> e,
+    Eml(Eml(Eml(1, Eml(Eml(1, 1), 1)), 1), Eml(Eml(1, 1), 1)) -> zero,
+    Eml(Eml(Eml(1, Eml(Eml(1, 1), 1)), 1), Eml(Eml(1, 1), Eml(Eml(Eml(1, 1), Eml(1, 1)), 1))) -> e,
+    Eml(Eml(Eml(1, Eml(Eml(1, 1), 1)), 1), Eml(Eml(1, Eml(1, 1)), 1)) -> One,
+    Eml(Eml(Eml(1, Eml(Eml(1, 1), 1)), 1), Eml(Eml(1, Eml(Eml(1, 1), 1)), 1)) -> e,
+    Eml(Eml(Eml(1, Eml(Eml(1, 1), 1)), Eml(1, 1)), 1) -> One,
+    Eml(Eml(Eml(1, Eml(Eml(1, 1), 1)), Eml(1, 1)), Eml(1, 1)) -> zero,
+    Eml(Eml(Eml(1, Eml(Eml(1, 1), 1)), Eml(1, 1)), Eml(1, Eml(Eml(1, Eml(1, 1)), 1))) -> One,
+    Eml(Eml(Eml(1, Eml(Eml(1, 1), 1)), Eml(1, 1)), Eml(Eml(1, 1), Eml(Eml(Eml(1, 1), Eml(1, 1)), 1))) -> One,
+    Eml(Eml(Eml(1, Eml(Eml(1, 1), 1)), Eml(1, 1)), Eml(Eml(1, Eml(Eml(1, 1), 1)), 1)) -> One)
 
   /**
     * A constant value of type `S` representing 1.
@@ -381,11 +439,57 @@ object Eml {
 }
 
 @main def run(): Unit = {
-  val (nAllTrees, exactTrees) = findExactTreesFuture
-  exactTrees.foreach {
-    case (k, v) => println(s"Exact tree: $k -> $v")
+  import Eml.constants
+
+  import scala.concurrent.duration.*
+
+  val (nAllTrees, exactTrees) = findExactTreesFuture(One.expandN(5).toSeq, 20.seconds, 5.minutes)
+  exactTrees.sortBy(_._1).foreach { case (k, v) =>
+    println(s"  $k -> ${
+      v match
+        case WholeNumber(1) => "One"
+        case WholeNumber(0) => "zero"
+        case NaturalExponential(WholeNumber(1)) => "e"
+        case _ => v.toString
+    },")
   }
 }
+
+@main def runQuick(): Unit = {
+  import Eml.constants
+
+  import scala.concurrent.duration.*
+
+  val (nAllTrees, exactTrees) = findExactTreesFuture(One.expandN(4).toSeq, 2.minutes, 5.minutes, 4)
+  exactTrees.sortBy(_._1).foreach { case (k, v) =>
+    println(s"  $k -> ${
+      v match
+        case WholeNumber(1) => "One"
+        case WholeNumber(0) => "zero"
+        case NaturalExponential(WholeNumber(1)) => "e"
+        case _ => v.toString
+    },")
+  }
+}
+
+@main def runA(): Unit = {
+  import Eml.constants
+  import com.phasmidsoftware.number.core.numerical.Divides.given
+
+  val sample = One.expandN(5).toSeq.zipWithIndex
+    .slice(408_000, 458_285)
+    .filter { case (_, i) => 100 |> i }
+
+  logger.info(s"Processing ${sample.size} trees")
+  sample.foreach { case (tree, i) =>
+    val t0 = System.currentTimeMillis()
+    tree.asExpression.evaluateAsIs
+    val elapsed = System.currentTimeMillis() - t0
+    logger.info(s"Tree $i: ${elapsed}ms")
+  }
+  logger.info(s"Processed trees")
+}
+
 /**
   * Represents a custom exception used within the context of `Eml` operations.
   *
