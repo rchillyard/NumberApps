@@ -295,9 +295,11 @@ object Eml {
     import scala.concurrent.*
     import scala.concurrent.ExecutionContext.Implicits.global
 
-    val allTrees = trees
-    logger.info(s"Confirmed trees: ${allTrees.size}")
-    val partitions = allTrees.zipWithIndex.grouped(allTrees.size / numPartitions).toSeq
+    val nt = trees.size
+    logger.info(s"Confirmed trees: ${trees.size}")
+    val partitionSize = math.max(trees.size / numPartitions, 2)
+    logger.info(s"Partition size: $partitionSize")
+    val partitions = trees.zipWithIndex.grouped(partitionSize).toSeq
     val indexedPartitions = partitions.zipWithIndex
     val futures: Seq[Future[Seq[(S, Eager)]]] =
       indexedPartitions.map {
@@ -328,8 +330,25 @@ object Eml {
         overallTimeout
       )
 
-    (allTrees.size, exactTrees.toSeq)
+    (trees.size, exactTrees.toSeq)
   }
+
+  import zio.*
+
+  def findExactTreesZio(trees: Seq[S], perPartitionTimeout: zio.Duration, numPartitions: Int = 8): ZIO[Any, Throwable, (Int, Seq[(S, Eager)])] =
+    val partitions = trees.zipWithIndex.grouped(trees.size / numPartitions).toSeq.zipWithIndex
+      .map { case (xs, i) => Partition(xs, i) }
+
+    ZIO.foreachPar(partitions) { partition =>
+      ZIO.attempt(partition.evaluate)
+        .timeout(perPartitionTimeout)
+        .map(_.getOrElse(Seq.empty))
+        .catchAll { e =>
+          ZIO.logError(s"$partition failed: $e").as(Seq.empty)
+        }
+    }.map { results =>
+      (trees.size, results.flatten)
+    }
 
   val ProgressReportInterval = 2_000
 
@@ -438,12 +457,61 @@ object Eml {
   val e: S = One.exp
 }
 
-@main def run(): Unit = {
+@main def runN(args: String*): Unit = {
+  import Eml.constants
+
+  import scala.concurrent.duration.*
+
+  val n = args.headOption.flatMap(_.toIntOption).getOrElse(1)
+
+  val trees = One.expandN(n).toSeq
+  logger.info(s"Processing $n trees")
+  val (nAllTrees, exactTrees) = findExactTreesFuture(trees, 20.seconds, 5.minutes)
+  exactTrees.sortBy(_._1).foreach { case (k, v) =>
+    println(s"  $k -> ${
+      v match
+        case WholeNumber(1) => "One"
+        case WholeNumber(0) => "zero"
+        case NaturalExponential(WholeNumber(1)) => "e"
+        case _ => v.toString
+    },")
+  }
+}
+
+@main def run5Zio(): Unit = {
+  import Eml.constants
+  import zio.{Runtime, Unsafe, durationInt}
+  Unsafe.unsafe { implicit unsafe =>
+    Runtime.default.unsafe.run(
+      Eml.findExactTreesZio(One.expandN(5).toSeq, 2.minutes)
+        .map { case (n, trees) => trees.foreach(println) }
+    ).getOrThrow()
+  }
+}
+
+@main def run5(): Unit = {
   import Eml.constants
 
   import scala.concurrent.duration.*
 
   val (nAllTrees, exactTrees) = findExactTreesFuture(One.expandN(5).toSeq, 20.seconds, 5.minutes)
+  exactTrees.sortBy(_._1).foreach { case (k, v) =>
+    println(s"  $k -> ${
+      v match
+        case WholeNumber(1) => "One"
+        case WholeNumber(0) => "zero"
+        case NaturalExponential(WholeNumber(1)) => "e"
+        case _ => v.toString
+    },")
+  }
+}
+
+@main def run6(): Unit = {
+  import Eml.constants
+
+  import scala.concurrent.duration.*
+
+  val (nAllTrees, exactTrees) = findExactTreesFuture(One.expandN(6).toSeq, 3.minutes, 15.minutes)
   exactTrees.sortBy(_._1).foreach { case (k, v) =>
     println(s"  $k -> ${
       v match
